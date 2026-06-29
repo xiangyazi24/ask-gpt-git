@@ -1,0 +1,5 @@
+# ask-gpt-git has no external Python dependencies.
+# It uses only the standard library (http.server, json, threading, subprocess).
+#
+# Runtime requirement: `gh` (GitHub CLI) must be installed and authenticated
+# for the git-drop polling to work.

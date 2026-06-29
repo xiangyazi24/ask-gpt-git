@@ -1,0 +1,18 @@
+{
+  "_comment": "Git-drop target routing. ask-gpt.py matches the channel name against these rules (longest prefix wins) to determine where ChatGPT should commit its answer. {ch} is replaced with the channel name.",
+  "enabled": true,
+  "rules": [
+    {
+      "prefix": "dm",
+      "repo": "user/repo",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md"
+    },
+    {
+      "prefix": "cron",
+      "repo": "user/other-repo",
+      "branch": "chatgpt-scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md"
+    }
+  ]
+}
