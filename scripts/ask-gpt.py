@@ -479,6 +479,11 @@ r = {}
 _gd_done = False        # git-drop completed via a new commit (DOM-independent)
 _gd_commit = ""
 _poll_to = 20 if _gdtgt else 90   # git-drop: tick fast so the commit-poll is timely
+try:
+    _terminal_commit_grace = max(0, int(os.environ.get("ASK_GITDROP_TERMINAL_GRACE", "180")))
+except Exception:
+    _terminal_commit_grace = 180
+_terminal_seen_at = 0.0
 _banner("SUBMITTED")
 _hb("dispatched, waiting for answer" + (" (git-drop: watching commit)" if _gdtgt else ""))
 while time.time() < deadline:
@@ -517,6 +522,13 @@ while time.time() < deadline:
     except Exception as e:
         _hb("server blip (%s), retrying" % type(e).__name__); time.sleep(5); continue
     st = r.get("status")
+    if st in ("completed", "needs_manual") and _gdtgt and not _gd_done:
+        if not _terminal_seen_at:
+            _terminal_seen_at = time.time()
+            _hb("terminal: status=%s but no git-drop commit yet; grace-polling" % st)
+        if time.time() - _terminal_seen_at < _terminal_commit_grace:
+            time.sleep(5)
+            continue
     if st in ("completed", "failed", "needs_manual"):
         _hb("terminal: status=%s" % st); break
     _hb("waiting (status=%s%s)" % (st or "processing", " +commit-watch" if _gdtgt else ""))
