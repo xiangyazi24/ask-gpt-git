@@ -9,7 +9,7 @@
 
   const VERSION = "1.2.0";
   const CFG = { channel: "" };
-  const ROTATE_AFTER_TURNS = 20;  // fresh-start after this many user messages
+  const ROTATE_AFTER_TURNS = 10;  // fresh-start after this many user messages
   let activated = false;
   let busy = false;
   let currentTask = "";
