@@ -106,20 +106,39 @@
       }
     } catch (_) {}
 
-    // Call original fetch and watch for error responses on connector traffic.
+    // Call original fetch and watch responses on connector traffic.
+    // Clone the response to read the body without consuming the original.
     const result = origFetch.apply(this, arguments);
 
     try {
-      if (BACKEND_API_RE.test(urlStr) && CONNECTOR_RE.test(urlStr + " " + bodyStr.slice(0, 1000))) {
+      const isConnectorTraffic = BACKEND_API_RE.test(urlStr) &&
+        CONNECTOR_RE.test(urlStr + " " + bodyStr.slice(0, 1000));
+      const isListAccessible = /list_accessible|connectors\/links/i.test(urlStr);
+
+      if (isConnectorTraffic || isListAccessible) {
         result.then((resp) => {
           try {
-            if (resp.status === 401 || resp.status === 403) {
-              emit({
-                __agpEvent: "connector_auth_error",
-                method,
-                url: urlStr.slice(0, 300),
-                status: resp.status,
-                ts: Date.now(),
+            const status = resp.status;
+            // Capture response body for diagnostics (clone so original is untouched)
+            if (status === 401 || status === 403 || isListAccessible || status >= 400) {
+              resp.clone().text().then((bodyText) => {
+                emit({
+                  __agpEvent: status >= 400 ? "connector_auth_error" : "connector_response",
+                  method,
+                  url: urlStr.slice(0, 300),
+                  status,
+                  responseBody: bodyText.slice(0, 2000),
+                  ts: Date.now(),
+                });
+              }).catch(() => {
+                emit({
+                  __agpEvent: "connector_auth_error",
+                  method,
+                  url: urlStr.slice(0, 300),
+                  status,
+                  responseBody: "(unreadable)",
+                  ts: Date.now(),
+                });
               });
             }
           } catch (_) {}

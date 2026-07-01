@@ -409,14 +409,20 @@
         addNetworkEvent("connector_init", { method: data.method, url: data.url });
         break;
       case "connector_api":
-        addNetworkEvent("connector_api", { method: data.method, url: data.url });
+        addNetworkEvent("connector_api", { method: data.method, url: data.url, bodySnippet: data.bodySnippet });
+        break;
+      case "connector_response":
+        addNetworkEvent("connector_response", { method: data.method, url: data.url, status: data.status, responseBody: data.responseBody });
+        if (data.responseBody && /unauthorized|invalid.*token|expired|no.*access/i.test(data.responseBody)) {
+          setConnectorState("disconnected", "response indicates auth failure (status " + data.status + ")");
+        }
         break;
       case "oauth_request":
         addNetworkEvent("oauth_refresh", { method: data.method, url: data.url });
         break;
       case "connector_auth_error":
         setConnectorState("disconnected", "auth error " + data.status);
-        addNetworkEvent("auth_error", { status: data.status, url: data.url });
+        addNetworkEvent("auth_error", { status: data.status, url: data.url, responseBody: data.responseBody });
         break;
     }
   }
