@@ -7,11 +7,13 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.1.0";
+  const VERSION = "1.2.0";
   const CFG = { channel: "" };
+  const ROTATE_AFTER_TURNS = 20;  // fresh-start after this many user messages
   let activated = false;
   let busy = false;
   let currentTask = "";
+  let turnCount = 0;
 
   // ── Connector health state ──
   let probeNonce = "";
@@ -293,6 +295,53 @@
     return false;
   }
 
+  // ── Conversation rotation (fresh-start) ──
+
+  function countUserMessages() {
+    try {
+      // ChatGPT renders user messages with data-message-author-role="user"
+      const msgs = document.querySelectorAll('[data-message-author-role="user"]');
+      return msgs.length;
+    } catch (_) { return 0; }
+  }
+
+  let _freshStarting = false;
+  async function doFreshStart(reason) {
+    if (_freshStarting) return;
+    _freshStarting = true;
+    log("fresh-start:", reason);
+
+    try {
+      // Try clicking New Chat button
+      const selectors = [
+        'a[href="/"]',
+        '[data-testid="create-new-chat-button"]',
+        'nav a[href="/"]',
+        'button[aria-label="New chat"]',
+        'a[aria-label="New chat"]',
+      ];
+      let btn = null;
+      for (const s of selectors) {
+        btn = document.querySelector(s);
+        if (btn) break;
+      }
+
+      if (btn) {
+        btn.click();
+        log("fresh-start: clicked New Chat");
+      } else {
+        log("fresh-start: no button found, navigating to /");
+        window.location.href = "https://chatgpt.com/";
+      }
+
+      turnCount = 0;
+      addNetworkEvent("fresh_start", { reason });
+      await new Promise(r => setTimeout(r, 4000));
+    } finally {
+      _freshStarting = false;
+    }
+  }
+
   // ── Task processing ──
 
   async function processTask(task) {
@@ -304,11 +353,25 @@
 
     setBusy(true, task.id || "");
     try {
+      // Rotate to fresh conversation if too many turns (keeps connector healthy)
+      const msgCount = countUserMessages();
+      if (ROTATE_AFTER_TURNS > 0 && msgCount >= ROTATE_AFTER_TURNS) {
+        log("rotating: " + msgCount + " messages, threshold " + ROTATE_AFTER_TURNS);
+        await doFreshStart("turn-count " + msgCount + " >= " + ROTATE_AFTER_TURNS);
+      }
+
+      // Also rotate if connector dropped during previous answer
+      if (connectorState.state === "disconnected") {
+        log("rotating: connector disconnected, trying fresh chat");
+        await doFreshStart("connector-disconnected");
+      }
+
       const idle = await waitForComposerIdle(900000);
       if (!idle) throw new Error("composer stayed busy");
       if (!(await injectPrompt(text))) throw new Error("prompt injection failed");
       if (!(await clickSend())) throw new Error("send did not take effect");
-      log("sent task", task.id, "channel", CFG.channel);
+      turnCount++;
+      log("sent task", task.id, "channel", CFG.channel, "turn", turnCount);
       return { ok: true };
     } catch (err) {
       setBusy(false, "");
@@ -387,10 +450,28 @@
       }
     } catch (_) {}
 
-    // No strong signal from DOM — keep current state or mark unknown.
-    // Don't downgrade from a network-confirmed state on missing DOM.
-    if (connectorState.state === "unknown") {
-      // Remains unknown.
+    // No connector element found — icon disappeared.
+    // Only flag if we previously saw it (transition from connected → gone).
+    if (connectorState.state === "connected") {
+      addNetworkEvent("connector_icon_vanished", {
+        detail: "connector DOM element disappeared",
+        wasProcessing: processing,
+      });
+      log("connector icon VANISHED (was connected, processing=" + processing + ")");
+      // Don't immediately mark disconnected — it may come back after answer.
+      // Mark as "flickering" and track.
+      setConnectorState("initializing", "connector icon vanished during generation — waiting for recovery");
+    } else if (connectorState.state === "initializing") {
+      // Already tracking a vanish — check if stuck too long (>30s = likely gone for good)
+      if (connectorState.stuckSince && Date.now() - connectorState.stuckSince > 30000) {
+        setConnectorState("disconnected", "connector icon gone >30s — likely unlinked");
+        addNetworkEvent("connector_icon_lost", {
+          goneForMs: Date.now() - connectorState.stuckSince,
+          wasProcessing: processing,
+        });
+        log("connector icon LOST — gone for " +
+          Math.round((Date.now() - connectorState.stuckSince) / 1000) + "s");
+      }
     }
   }
 
