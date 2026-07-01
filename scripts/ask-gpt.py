@@ -366,6 +366,79 @@ def _drop_head_sha(tgt):
         return ""
 
 _gdtgt = _gitdrop_target(ch)
+
+# ── Interactive channel registration: guess from git remote, confirm with user ──
+if not _gdtgt and not os.environ.get("ASK_NO_GITDROP", "").strip() in ("1", "true", "yes"):
+    _prefix = ch.rstrip("0123456789")
+    # Try to guess repo from cwd's git remote
+    _guess_repo = ""
+    try:
+        _remote_url = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5).stdout.strip()
+        # Extract owner/repo from https or ssh URL
+        import re as _re
+        _m = _re.search(r'github\.com[:/](.+?)(?:\.git)?$', _remote_url)
+        if _m:
+            _guess_repo = _m.group(1)
+    except Exception:
+        pass
+
+    sys.stderr.write("\n[ask-gpt] No git-drop target for prefix '%s'.\n" % _prefix)
+    if _guess_repo:
+        sys.stderr.write("  Detected repo: %s — correct? [Y/n/other repo]: " % _guess_repo)
+    else:
+        sys.stderr.write("  Enter GitHub repo (e.g. xiangyazi24/Ripple), or 'skip': ")
+    sys.stderr.flush()
+
+    _input = ""
+    if sys.stdin.isatty():
+        _input = input().strip()
+    else:
+        sys.stderr.write("(stdin piped, cannot prompt — sending without git-drop)\n")
+
+    if _input.lower() == "skip":
+        pass  # fall through without git-drop
+    elif _input.lower() in ("", "y", "yes") and _guess_repo:
+        _input_repo = _guess_repo
+    elif _input and "/" in _input:
+        _input_repo = _input
+    elif _guess_repo:
+        _input_repo = _guess_repo
+    else:
+        _input_repo = ""
+
+    if _input_repo:
+        sys.stderr.write("  branch [scratch]> ")
+        sys.stderr.flush()
+        _input_branch = "scratch"
+        try:
+            _b = input().strip()
+            if _b:
+                _input_branch = _b
+        except Exception:
+            pass
+        _new_rule = {
+            "prefix": _prefix,
+            "repo": _input_repo,
+            "branch": _input_branch,
+            "file": "scratch/_CHATGPT_DROP_{ch}.md"
+        }
+        _cfgp = os.path.expanduser(os.environ.get(
+            "ASK_GITDROP_CONFIG",
+            "~/repos/ask-gpt-git/config/channel-routes.json"))
+        try:
+            _cfg = json.load(open(_cfgp))
+            _cfg.setdefault("rules", []).append(_new_rule)
+            with open(_cfgp, "w") as _f:
+                json.dump(_cfg, _f, indent=2, ensure_ascii=False)
+                _f.write("\n")
+            sys.stderr.write("  ✓ Registered: %s → %s@%s\n" % (_prefix, _input_repo, _input_branch))
+            _gdtgt = {"repo": _input_repo, "branch": _input_branch,
+                       "file": "scratch/_CHATGPT_DROP_%s.md" % ch}
+        except Exception as _e:
+            sys.stderr.write("  ✗ Failed to save: %s\n" % _e)
+
 _allow_dom_fallback = os.environ.get("ASK_ALLOW_DOM", "").strip().lower() in ("1", "true", "yes")
 if not _gdtgt and not _allow_dom_fallback:
     _release_channel_reservation(ch, _chan_res_token)

@@ -42,6 +42,10 @@ ask-gpt-git/
 ├── server.py          # HTTP server + endpoints
 ├── gitdrop.py         # GitHub commit polling (daemon thread)
 ├── browser.py         # Browser automation stub (extension handles it)
+├── extension/         # Slim Chrome extension: send prompt only, no DOM capture
+├── scripts/           # ask-gpt.py + gitdrop-config.py client tooling
+├── config/
+│   └── channel-routes.json
 ├── config.json.example
 ├── requirements.txt   # No external deps (stdlib only)
 └── README.md
@@ -50,6 +54,8 @@ ask-gpt-git/
 - **server.py** — `http.server`-based threaded HTTP server. Handles task lifecycle (create, dispatch, wait, complete). ~280 lines.
 - **gitdrop.py** — Polls GitHub via `gh api` for new commits on the drop file. When a commit lands with a SHA different from the baseline, marks the task completed. ~100 lines.
 - **browser.py** — Stub. The Chrome extension handles sending questions to ChatGPT tabs by polling `/api/pending`. This file is a future extension point for headless automation.
+- **extension/** — Canonical git-drop-only Chrome extension. It activates a tab/channel, polls for pending tasks, injects the prompt, clicks send, and waits for the server to mark the task done from a GitHub commit. It does not capture ChatGPT's answer from the DOM.
+- **config/channel-routes.json** — Canonical channel-prefix mapping: channel prefix -> GitHub drop repo/branch/file and optional local worktree.
 
 ## API Endpoints
 
@@ -71,6 +77,7 @@ ask-gpt-git/
 | `/api/ask` | `{question, channel, gitdrop: {repo, branch, file, baseline}}` | Submit a question |
 | `/api/gitdrop-done` | `{task, channel, sha}` | External notification that a commit landed |
 | `/api/respond` | `{task}` | Extension confirms it sent the question |
+| `/api/nack/<id>` | `{reason}` | Extension failed to send; requeue task |
 | `/api/clear` | `{}` | Clear all tasks |
 
 ## Running
@@ -101,3 +108,23 @@ python3 server.py 9000     # custom port
 - Reset/fresh-start machinery
 - Log rotation
 - ~2800 lines of complexity
+
+## Channel and repo routing
+
+`scripts/ask-gpt.py` auto-detects the current tmux window, chooses an idle
+channel in that channel group, and appends a git-drop instruction from:
+
+```bash
+~/repos/ask-gpt-git/config/channel-routes.json
+```
+
+Manage the mapping with:
+
+```bash
+~/repos/ask-gpt-git/scripts/gitdrop-config.py
+~/repos/ask-gpt-git/scripts/gitdrop-config.py resolve Q1
+~/repos/ask-gpt-git/scripts/gitdrop-config.py check
+```
+
+The old workspace paths can remain as compatibility symlinks, but this repo is
+the canonical home for the git-only bridge code, extension, and route config.

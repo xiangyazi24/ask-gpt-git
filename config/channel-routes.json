@@ -1,0 +1,111 @@
+{
+  "_comment": "Canonical ask-gpt-git channel routes. Longest prefix wins. {ch} is replaced by the active channel name. worktree is optional and is used for local sanity checks only; git-drop delivery uses repo/branch/file.",
+  "enabled": true,
+  "rules": [
+    {
+      "prefix": "research",
+      "repo": "xiangyazi24/Q-series-and-Chan-s-work",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Q-series-and-Chan-s-work"
+    },
+    {
+      "prefix": "Q",
+      "repo": "xiangyazi24/Q-series-and-Chan-s-work",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Q-series-and-Chan-s-work"
+    },
+    {
+      "prefix": "ccc",
+      "repo": "xiangyazi24/ccc",
+      "branch": "chatgpt-drop",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/ccc"
+    },
+    {
+      "prefix": "life",
+      "repo": "xiangyazi24/ccc",
+      "branch": "chatgpt-drop",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/ccc"
+    },
+    {
+      "prefix": "dm-codex",
+      "repo": "xiangyazi24/FLT",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/flt-ai"
+    },
+    {
+      "prefix": "dm",
+      "repo": "xiangyazi24/FLT",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/flt-ai"
+    },
+    {
+      "prefix": "ac",
+      "repo": "xiangyazi24/Q-series-and-Chan-s-work",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Q-series-and-Chan-s-work"
+    },
+    {
+      "prefix": "chan",
+      "repo": "xiangyazi24/Q-series-and-Chan-s-work",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Q-series-and-Chan-s-work"
+    },
+    {
+      "prefix": "family",
+      "repo": "xiangyazi24/Ripple",
+      "branch": "chatgpt-drop",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/Ripple"
+    },
+    {
+      "prefix": "ripple",
+      "repo": "xiangyazi24/Ripple",
+      "branch": "chatgpt-drop",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/Ripple"
+    },
+    {
+      "prefix": "pbook",
+      "repo": "xiangyazi24/Bounded",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Bounded"
+    },
+    {
+      "prefix": "BGP",
+      "repo": "xiangyazi24/Bounded",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Bounded"
+    },
+    {
+      "prefix": "bgp",
+      "repo": "xiangyazi24/Bounded",
+      "branch": "scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/.openclaw/workspace/projects/Bounded"
+    },
+    {
+      "prefix": "cron",
+      "repo": "xiangyazi24/Shen_work",
+      "branch": "chatgpt-scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/Shen_work"
+    },
+    {
+      "prefix": "shen",
+      "repo": "xiangyazi24/Shen_work",
+      "branch": "chatgpt-scratch",
+      "file": "scratch/_CHATGPT_DROP_{ch}.md",
+      "worktree": "/Users/huangx/repos/Shen_work"
+    }
+  ]
+}

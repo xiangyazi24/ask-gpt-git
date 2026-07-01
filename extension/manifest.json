@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Git-Drop Bridge",
+  "version": "1.1.0",
+  "description": "Git-drop-only bridge: send prompts to ChatGPT; answers arrive as GitHub commits. Includes GitHub connector health monitoring.",
+  "permissions": [
+    "alarms",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://localhost:8801/*",
+    "http://127.0.0.1:8801/*",
+    "http://100.69.3.30:8801/*",
+    "http://192.168.1.113:8801/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "connector-probe.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

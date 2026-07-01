@@ -42,6 +42,7 @@ channels = {}                   # channel_name -> last heartbeat timestamp
 channel_groups = {}             # group_name -> {"channels": set(), "updated": ts}
 channel_seq = {}                # channel_name -> next sequence number
 task_events = {}                # task_id -> threading.Event (signaled on completion)
+connector_health = {}           # channel_name -> latest connector health report
 lock = threading.Lock()
 _start_time = time.time()
 
@@ -72,6 +73,33 @@ def _active_channels():
     now = time.time()
     return sorted(ch for ch, ts in channels.items()
                   if now - ts < CHANNEL_TIMEOUT)
+
+
+def _channel_stats():
+    """Return per-channel task counts for status/auto-dispatch. Caller holds lock."""
+    now = time.time()
+    out = {}
+    for ch, ts in channels.items():
+        out.setdefault(ch, {
+            "pending": 0,
+            "processing": 0,
+            "completed": 0,
+            "failed": 0,
+            "last_seen_s": int(now - ts),
+        })
+    for t in tasks.values():
+        ch = t.get("channel", "")
+        info = out.setdefault(ch, {
+            "pending": 0,
+            "processing": 0,
+            "completed": 0,
+            "failed": 0,
+            "last_seen_s": None,
+        })
+        st = t.get("status", "")
+        if st in info:
+            info[st] += 1
+    return out
 
 
 def _cleanup():
@@ -173,14 +201,28 @@ class Handler(BaseHTTPRequestHandler):
                 by_status = {}
                 for t in tasks.values():
                     by_status[t["status"]] = by_status.get(t["status"], 0) + 1
-                uptime = int(time.time() - _start_time)
+                now = time.time()
+                uptime = int(now - _start_time)
+                # Build connector health summary for active channels.
+                conn_summary = {}
+                for ch in _active_channels():
+                    report = connector_health.get(ch)
+                    if report:
+                        conn_summary[ch] = {
+                            "state": report.get("connector_state", "unknown"),
+                            "last_transition": report.get("last_transition"),
+                            "details": report.get("details"),
+                            "age_s": int(now - report.get("reported_at", now)),
+                        }
                 self._json({
                     "ok": True,
                     **by_status,
                     "total": len(tasks),
                     "channels": _active_channels(),
+                    "by_channel": _channel_stats(),
                     "groups": {g: sorted(info["channels"])
                                for g, info in channel_groups.items()},
+                    "connector_health": conn_summary,
                     "uptime_s": uptime,
                     "uptime": "%dh%dm" % (uptime // 3600, (uptime % 3600) // 60),
                 })
@@ -262,6 +304,17 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json({"error": "timeout", "id": tid,
                             "status": t.get("status") if t else "gone"}, 408)
+
+        elif path == "/api/connector-health":
+            ch = self._query("channel")
+            with lock:
+                if ch:
+                    report = connector_health.get(ch, {})
+                    self._json({"ok": True, "channel": ch, **report})
+                else:
+                    self._json({"ok": True, "channels": {
+                        k: v for k, v in connector_health.items()
+                    }})
 
         else:
             self._json({"error": "not found"}, 404)
@@ -364,6 +417,56 @@ class Handler(BaseHTTPRequestHandler):
                     t["status"] = "processing"
                     t["updated"] = time.time()
             self._json({"ok": True})
+
+        elif path == "/api/nack" or path.startswith("/api/nack/"):
+            # Extension could not inject/send the prompt. Requeue a few times;
+            # do not treat any browser-side content as the answer.
+            tid = body.get("task", body.get("id", ""))
+            if not tid and path.startswith("/api/nack/"):
+                tid = path.split("/")[-1]
+            reason = body.get("reason", "dispatch_failed")
+            with lock:
+                t = tasks.get(tid)
+                if not t:
+                    self._json({"ok": False, "error": "not found"}, 404)
+                    return
+                retries = int(t.get("retries", 0)) + 1
+                t["retries"] = retries
+                t["last_nack"] = reason
+                t["updated"] = time.time()
+                if t.get("status") not in ("completed", "failed"):
+                    if retries >= 5:
+                        t["status"] = "failed"
+                        t["answer"] = "[FAILED] dispatch failed repeatedly: %s" % reason
+                        evt = task_events.get(tid)
+                        if evt:
+                            evt.set()
+                    else:
+                        t["status"] = "pending"
+                status = t.get("status")
+            self._json({"ok": True, "task": tid, "status": status, "retries": retries})
+
+        elif path == "/api/connector-health":
+            ch = body.get("channel", "")
+            state = body.get("connector_state", "unknown")
+            now = time.time()
+            report = {
+                "channel": ch,
+                "connector_state": state,
+                "last_transition": body.get("last_transition"),
+                "details": body.get("details"),
+                "network_events": body.get("network_events", []),
+                "reported_at": now,
+            }
+            with lock:
+                prev = connector_health.get(ch, {})
+                prev_state = prev.get("connector_state", "unknown")
+                connector_health[ch] = report
+            if state != prev_state and state in ("disconnected", "stuck"):
+                _log("CONNECTOR %s: %s → %s  %s",
+                     ch, prev_state, state,
+                     body.get("details") or "")
+            self._json({"ok": True, "channel": ch, "state": state})
 
         elif path == "/api/clear":
             with lock:
