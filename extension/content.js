@@ -450,28 +450,20 @@
       }
     } catch (_) {}
 
-    // No connector element found — icon disappeared.
-    // Only flag if we previously saw it (transition from connected → gone).
-    if (connectorState.state === "connected") {
-      addNetworkEvent("connector_icon_vanished", {
-        detail: "connector DOM element disappeared",
-        wasProcessing: processing,
+    // No connector DOM element found.
+    // This is NORMAL during answer generation — ChatGPT removes the icon
+    // while generating and re-adds it after. Do NOT mark disconnected based
+    // on DOM alone. The network-layer probe (list_accessible response) is
+    // the authoritative signal for connector health.
+    //
+    // Only log as an observation, never change state from DOM absence.
+    if (connectorState.state === "connected" && !busy) {
+      // Icon gone while NOT processing — more suspicious, but still don't
+      // downgrade. Log for diagnostics only.
+      addNetworkEvent("connector_icon_absent", {
+        detail: "DOM icon absent while idle",
+        busy: false,
       });
-      log("connector icon VANISHED (was connected, processing=" + processing + ")");
-      // Don't immediately mark disconnected — it may come back after answer.
-      // Mark as "flickering" and track.
-      setConnectorState("initializing", "connector icon vanished during generation — waiting for recovery");
-    } else if (connectorState.state === "initializing") {
-      // Already tracking a vanish — check if stuck too long (>30s = likely gone for good)
-      if (connectorState.stuckSince && Date.now() - connectorState.stuckSince > 30000) {
-        setConnectorState("disconnected", "connector icon gone >30s — likely unlinked");
-        addNetworkEvent("connector_icon_lost", {
-          goneForMs: Date.now() - connectorState.stuckSince,
-          wasProcessing: processing,
-        });
-        log("connector icon LOST — gone for " +
-          Math.round((Date.now() - connectorState.stuckSince) / 1000) + "s");
-      }
     }
   }
 
@@ -496,6 +488,20 @@
         addNetworkEvent("connector_response", { method: data.method, url: data.url, status: data.status, responseBody: data.responseBody });
         if (data.responseBody && /unauthorized|invalid.*token|expired|no.*access/i.test(data.responseBody)) {
           setConnectorState("disconnected", "response indicates auth failure (status " + data.status + ")");
+        } else if (data.responseBody && /list_accessible/.test(data.url)) {
+          // list_accessible is the AUTHORITATIVE connector health signal.
+          // Check if write actions are present.
+          var hasWrite = /create_file|create_commit|create_blob|update_ref/.test(data.responseBody);
+          var hasGitHub = /GitHub/.test(data.responseBody);
+          if (hasGitHub && hasWrite) {
+            setConnectorState("connected", "list_accessible confirms GitHub + write actions");
+          } else if (hasGitHub && !hasWrite) {
+            setConnectorState("disconnected", "list_accessible: GitHub present but NO write actions — read-only");
+            addNetworkEvent("connector_write_lost", { detail: "GitHub connector has no write actions" });
+            log("CONNECTOR DEGRADED: GitHub present but write actions missing!");
+          } else if (!hasGitHub) {
+            setConnectorState("disconnected", "list_accessible: no GitHub connector in response");
+          }
         }
         break;
       case "oauth_request":
